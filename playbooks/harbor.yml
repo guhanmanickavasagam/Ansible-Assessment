@@ -1,0 +1,86 @@
+
+---
+- name: Install and Configure Harbor Registry
+  hosts: server1
+  become: true
+  gather_facts: true
+
+  vars:
+    harbor_version: "2.14.0"
+    harbor_install_dir: "/opt"
+    harbor_dir: "/opt/harbor"
+    harbor_port: 8081
+    harbor_admin_password: "ChangeThisStrongPassword123!"
+
+  tasks:
+
+    - name: Update Ubuntu package cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install Docker and required packages
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+          - python3
+          - curl
+          - tar
+        state: present
+
+    - name: Start and enable Docker
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Download Harbor online installer
+      ansible.builtin.get_url:
+        url: "https://github.com/goharbor/harbor/releases/download/v{{ harbor_version }}/harbor-online-installer-v{{ harbor_version }}.tgz"
+        dest: "/opt/harbor-online-installer.tgz"
+        mode: "0644"
+
+    - name: Extract Harbor installer
+      ansible.builtin.unarchive:
+        src: "/opt/harbor-online-installer.tgz"
+        dest: "{{ harbor_install_dir }}"
+        remote_src: true
+        creates: "{{ harbor_dir }}/harbor.yml.tmpl"
+
+    - name: Copy Harbor configuration template
+      ansible.builtin.copy:
+        src: "{{ harbor_dir }}/harbor.yml.tmpl"
+        dest: "{{ harbor_dir }}/harbor.yml"
+        remote_src: true
+        force: false
+
+    - name: Configure Harbor hostname
+      ansible.builtin.lineinfile:
+        path: "{{ harbor_dir }}/harbor.yml"
+        regexp: '^hostname:'
+        line: "hostname: {{ ansible_default_ipv4.address }}"
+
+    - name: Configure Harbor HTTP port
+      ansible.builtin.replace:
+        path: "{{ harbor_dir }}/harbor.yml"
+        regexp: '(^  port: )80$'
+        replace: '\g<1>{{ harbor_port }}'
+
+    - name: Configure Harbor administrator password
+      ansible.builtin.lineinfile:
+        path: "{{ harbor_dir }}/harbor.yml"
+        regexp: '^harbor_admin_password:'
+        line: "harbor_admin_password: {{ harbor_admin_password }}"
+
+    - name: Install and start Harbor
+      ansible.builtin.command:
+        cmd: ./install.sh
+        chdir: "{{ harbor_dir }}"
+        creates: "{{ harbor_dir }}/docker-compose.yml"
+
+    - name: Display Harbor access details
+      ansible.builtin.debug:
+        msg:
+          - "Harbor installation completed."
+          - "URL: http://{{ ansible_default_ipv4.address }}:{{ harbor_port }}"
+          - "Username: admin"

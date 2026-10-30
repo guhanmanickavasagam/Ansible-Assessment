@@ -1,0 +1,49 @@
+
+---
+- name: Install and Configure Nginx
+  hosts: server1
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: Update Ubuntu package cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install Nginx
+      ansible.builtin.apt:
+        name: nginx
+        state: present
+
+    - name: Start and enable Nginx service
+      ansible.builtin.systemd:
+        name: nginx
+        state: started
+        enabled: true
+
+    - name: Configure Nginx default webpage
+      ansible.builtin.copy:
+        dest: /var/www/html/index.html
+        content: |
+          <html>
+          <head>
+            <title>My Nginx Server</title>
+          </head>
+          <body>
+            <h1>Hello! Nginx is working successfully!</h1>
+            <p>Configured using Ansible Playbook.</p>
+          </body>
+          </html>
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Restart Nginx service
+      ansible.builtin.systemd:
+        name: nginx
+        state: restarted
+
+    - name: Display success message
+      ansible.builtin.debug:
+        msg: "Nginx installed and configured successfully!"

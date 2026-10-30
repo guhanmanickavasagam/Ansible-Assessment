@@ -1,0 +1,91 @@
+
+---
+- name: Install and Configure SonarQube
+  hosts: server1
+  become: true
+  gather_facts: true
+
+  vars:
+    sonarqube_dir: /opt/sonarqube
+    sonarqube_image: sonarqube:community
+
+  tasks:
+
+    - name: Update Ubuntu package cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install Docker and Docker Compose
+      ansible.builtin.apt:
+        name:
+          - docker.io
+          - docker-compose-v2
+        state: present
+
+    - name: Start and enable Docker service
+      ansible.builtin.systemd:
+        name: docker
+        state: started
+        enabled: true
+
+    - name: Configure Elasticsearch memory requirement
+      ansible.builtin.sysctl:
+        name: vm.max_map_count
+        value: "524288"
+        state: present
+        reload: true
+
+    - name: Configure maximum file descriptors
+      ansible.builtin.sysctl:
+        name: fs.file-max
+        value: "131072"
+        state: present
+        reload: true
+
+    - name: Create SonarQube directory
+      ansible.builtin.file:
+        path: "{{ sonarqube_dir }}"
+        state: directory
+        mode: "0755"
+
+    - name: Create SonarQube Docker Compose file
+      ansible.builtin.copy:
+        dest: "{{ sonarqube_dir }}/compose.yaml"
+        mode: "0644"
+        content: |
+          services:
+            sonarqube:
+              image: {{ sonarqube_image }}
+              container_name: sonarqube
+              ports:
+                - "9000:9000"
+              restart: unless-stopped
+              ulimits:
+                nofile:
+                  soft: 131072
+                  hard: 131072
+                nproc: 8192
+              volumes:
+                - sonarqube_data:/opt/sonarqube/data
+                - sonarqube_logs:/opt/sonarqube/logs
+                - sonarqube_extensions:/opt/sonarqube/extensions
+
+          volumes:
+            sonarqube_data:
+            sonarqube_logs:
+            sonarqube_extensions:
+
+    - name: Start SonarQube container
+      ansible.builtin.command:
+        cmd: docker compose up -d
+        chdir: "{{ sonarqube_dir }}"
+      register: sonarqube_result
+      changed_when: "'Started' in sonarqube_result.stdout or 'Created' in sonarqube_result.stdout or 'Pulled' in sonarqube_result.stderr"
+
+    - name: Display SonarQube installation message
+      ansible.builtin.debug:
+        msg:
+          - "SonarQube installation completed."
+          - "Dashboard: http://localhost:9000"
+          - "Default username: admin"
+          - "Default password: admin"

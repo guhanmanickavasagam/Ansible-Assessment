@@ -1,0 +1,57 @@
+
+---
+- name: Install and Configure Jenkins
+  hosts: server1
+  become: true
+  gather_facts: true
+
+  tasks:
+
+    - name: Update Ubuntu package cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install Java and required packages
+      ansible.builtin.apt:
+        name:
+          - fontconfig
+          - openjdk-21-jre
+          - curl
+        state: present
+
+    - name: Create Jenkins keyring directory
+      ansible.builtin.file:
+        path: /usr/share/keyrings
+        state: directory
+        mode: '0755'
+
+    - name: Download Jenkins GPG key
+      ansible.builtin.get_url:
+        url: https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key
+        dest: /usr/share/keyrings/jenkins-keyring.asc
+        mode: '0644'
+
+    - name: Add Jenkins LTS repository
+      ansible.builtin.apt_repository:
+        repo: "deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] https://pkg.jenkins.io/debian-stable binary/"
+        filename: jenkins
+        state: present
+
+    - name: Update package cache
+      ansible.builtin.apt:
+        update_cache: true
+
+    - name: Install Jenkins
+      ansible.builtin.apt:
+        name: jenkins
+        state: present
+
+    - name: Start and enable Jenkins service
+      ansible.builtin.systemd:
+        name: jenkins
+        state: started
+        enabled: true
+
+    - name: Display Jenkins installation message
+      ansible.builtin.debug:
+        msg: "Jenkins installed and configured successfully!"
